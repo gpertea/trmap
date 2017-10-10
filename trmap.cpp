@@ -22,16 +22,6 @@
 using std::cout;
 using std::endl;
 
-/*
-struct ObjInterval: public GInterval {
-	GffObj* obj;
-	//virtual int GetLowPoint() const{return obj->start;}
-	//virtual int GetHighPoint() const{return obj->end;}
-	uint getStart() const {return obj->start;}
-	uint getEnd() const {return obj->end;}
-	ObjInterval(GffObj* obj): obj(obj){}
-};
-*/
 struct qInterval {
 	std::string seg;
 	int start;
@@ -65,8 +55,8 @@ std::vector<qInterval> readQueries(std::istream& input) { //RVO should make this
 int main(int argc, char * const argv[]) {
 //	const std::string usage=std::string("Usage: ")+argv[0]+"\n";
 	const std::string usage = std::string("Positional arguments:\n")+
-			"<input_gff>	reference file in GFF format\n"+
-			"<query_BED>	query file in BED format, or \"-\" to take from stdin\n";
+			"<ref_gff>    reference file name in GFF/BED format\n"+
+			"<query_gff>  query file name in GFF/BED format or \"-\" to take from stdin\n";
 			//"Options:\n"+
 			//"-T		use interval trees";
 
@@ -77,36 +67,26 @@ int main(int argc, char * const argv[]) {
 		exit(EXIT_SUCCESS);
 	}
 
-	//bool doNCLorITT = !args.getOpt('T');
-	//bool doNCLorITT = true;
 	std::unordered_map<std::string, GIntervalTree> map_trees;
-	//std::unordered_map<std::string, NCList<ObjInterval> > map_nc;
 
-	const char* o_file = args.getOpt('o') ? args.getOpt('o') : "mapped_ov.tab";
-
-//	if(args.isError()) {
-//		std::cerr << "Error in arg #" << args.isError() << "\n";
-//		exit(EXIT_FAILURE);
-//	}
+	const char* o_file = args.getOpt('o') ? args.getOpt('o') : "-";
 
 	if (args.startNonOpt()!=2) {
 		std::cerr << "Only " << args.startNonOpt() << " arguments provided (expected 2)" << "\n";
 		//print usage here?
 		exit(EXIT_FAILURE);
 	}
-	const char* gff_file = args.nextNonOpt();
+	const char* ref_file = args.nextNonOpt();
 	const char* q_file = args.nextNonOpt();
 
-	FILE* f=fopen(gff_file, "r");
+	FILE* f=fopen(ref_file, "r");
 
 	//always good to check if the file is actually there and can be read
-	if (f==NULL) GError("Error: could not open reference annotation file (%s)!\n", gff_file);
-
+	if (f==NULL) GError("Error: could not open reference annotation file (%s)!\n", ref_file);
+	const char* fext=getFileExt(ref_file);
 	GffReader myR(f, true, true);
+	if (Gstricmp(fext, "bed")==0) myR.isBED();
 	myR.readAll(false, true, true);
-	//fclose(f); // don't do it, myR will do it when going out of scope
-
-//	cout << myR.gflst[0]->getGSeqName() << "\n";
 
 	//Interval tree
 	for (int i=0; i<myR.gflst.Count(); i++) {
@@ -133,25 +113,27 @@ int main(int argc, char * const argv[]) {
 //		query_file.close(); //will be done automagically
 	}
 
-	FILE* oFile2=fopen(o_file, "w");
+	FILE* outFH=NULL;
+	if (strcmp(o_file, "-")==0) outFH=stdout;
+	                       else outFH=fopen(o_file, "w");
 
 	//std::chrono::time_point<std::chrono::high_resolution_clock> pre_ov = std::chrono::high_resolution_clock::now();
 	for (std::vector<qInterval>::const_iterator it=queries.begin(); it!=queries.end(); ++it){
 			//		std::vector<ObjInterval> overlaps;
 			TemplateStack<GSeg*> * enu = map_trees.at(it->seg).Enumerate(it->start, it->end);
 			if(enu->Size()!=0){
-				fprintf(oFile2, "##Qry|%s: %i-%i %s\n", it->seg.c_str(), it->start, it->end, it->attrs.c_str());
+				fprintf(outFH, "##Qry|%s: %i-%i %s\n", it->seg.c_str(), it->start, it->end, it->attrs.c_str());
 				//			oFile << "##Qry|" << it->seg << ":" << it->start << "-" << it->end << it->attrs << "\n";
 				//			oFile.flush();
 				for (int i=0; i<enu->Size(); ++i) {
 					//static_cast<ObjInterval*>((*enu)[i])->obj->printGxf(oFile2);
-					((GffObj*)((*enu)[i]))->printGxf(oFile2);
+					((GffObj*)((*enu)[i]))->printGxf(outFH);
 				}
 			}
 			delete enu;
 	}
 	//std::chrono::duration<double> ov_time = std::chrono::high_resolution_clock::now()-pre_ov;
-	fclose(oFile2);
+	fclose(outFH);
 
 	//std::cerr << (doNCLorITT?"NCList time: ":"tree time: ") << ov_time.count() << "\n";
 	return 0;
