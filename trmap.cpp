@@ -12,7 +12,7 @@
 #include <vector>
 #include <fstream>
 #include <sstream>
-#include <chrono>
+//#include <chrono>
 
 #include "GBase.h"
 #include "gff.h"
@@ -23,7 +23,7 @@ using std::cout;
 using std::endl;
 
 struct qInterval {
-	std::string seg;
+	std::string name;
 	int start;
 	int end;
 	std::string attrs; //everything else
@@ -40,13 +40,14 @@ std::vector<qInterval> readQueries(std::istream& input) { //RVO should make this
 		if (line.length()!=0 && line.front()!='#'){ //neither blank nor comment, could use continue
 			std::stringstream ss;
 			ss.str(line);
-			std::string seg;
+			std::string name;
 			int start;
 			int end;
 			std::string attrs;
-			ss>>seg>>start>>end;
+			ss>>name>>start>>end;
+			--start;
 			std::getline(ss, attrs);
-			queries.push_back({seg,start,end,attrs});
+			queries.push_back({name,start,end,attrs});
 		}
 	}
 	return queries;
@@ -72,33 +73,31 @@ int main(int argc, char * const argv[]) {
 	const char* o_file = args.getOpt('o') ? args.getOpt('o') : "-";
 
 	if (args.startNonOpt()!=2) {
-		std::cerr << "Only " << args.startNonOpt() << " arguments provided (expected 2)" << "\n";
-		//print usage here?
-		exit(EXIT_FAILURE);
+		std::cerr << usage << "\nOnly " << args.startNonOpt() << " arguments provided (expected 2)\n";
+		exit(1);
 	}
 	const char* ref_file = args.nextNonOpt();
 	const char* q_file = args.nextNonOpt();
 
-	FILE* f=fopen(ref_file, "r");
+	FILE* fr=fopen(ref_file, "r");
 
 	//always good to check if the file is actually there and can be read
-	if (f==NULL) GError("Error: could not open reference annotation file (%s)!\n", ref_file);
+	if (fr==NULL) GError("Error: could not open reference annotation file (%s)!\n", ref_file);
 	const char* fext=getFileExt(ref_file);
-	GffReader myR(f, true, true);
+	GffReader myR(fr, true, true);
 	if (Gstricmp(fext, "bed")==0) myR.isBED();
 	myR.readAll(false, true, true);
 
 	//Interval tree
 	for (int i=0; i<myR.gflst.Count(); i++) {
-		GffObj* transcript=myR.gflst[i];
-		map_trees[transcript->getGSeqName()].Insert(transcript);
+		GffObj* t=myR.gflst[i];
+		map_trees[t->getGSeqName()].Insert(t);
 	}
 
-//		cout << map_trees.size() << "\n";
-//		for (std::unordered_map<std::string, IntervalTree>::const_iterator it = map_trees.begin(); it!=map_trees.end(); ++it){
-//			cout << it->first << "\n";
-//		}
-
+	FILE* outFH=NULL;
+	if (strcmp(o_file, "-")==0) outFH=stdout;
+	                       else outFH=fopen(o_file, "w");
+	/*
 	std::vector<qInterval> queries;
 	if(*q_file=='-') {
 		queries = readQueries(std::cin);
@@ -113,17 +112,13 @@ int main(int argc, char * const argv[]) {
 //		query_file.close(); //will be done automagically
 	}
 
-	FILE* outFH=NULL;
-	if (strcmp(o_file, "-")==0) outFH=stdout;
-	                       else outFH=fopen(o_file, "w");
-
 	//std::chrono::time_point<std::chrono::high_resolution_clock> pre_ov = std::chrono::high_resolution_clock::now();
 	for (std::vector<qInterval>::const_iterator it=queries.begin(); it!=queries.end(); ++it){
 			//		std::vector<ObjInterval> overlaps;
-			TemplateStack<GSeg*> * enu = map_trees.at(it->seg).Enumerate(it->start, it->end);
+			TemplateStack<GSeg*> * enu = map_trees.at(it->name).Enumerate(it->start, it->end);
 			if(enu->Size()!=0){
-				fprintf(outFH, "##Qry|%s: %i-%i %s\n", it->seg.c_str(), it->start, it->end, it->attrs.c_str());
-				//			oFile << "##Qry|" << it->seg << ":" << it->start << "-" << it->end << it->attrs << "\n";
+				fprintf(outFH, "##Qry|%s: %i-%i %s\n", it->name.c_str(), it->start, it->end, it->attrs.c_str());
+				//			oFile << "##Qry|" << it->name << ":" << it->start << "-" << it->end << it->attrs << "\n";
 				//			oFile.flush();
 				for (int i=0; i<enu->Size(); ++i) {
 					//static_cast<ObjInterval*>((*enu)[i])->obj->printGxf(oFile2);
@@ -133,8 +128,38 @@ int main(int argc, char * const argv[]) {
 			delete enu;
 	}
 	//std::chrono::duration<double> ov_time = std::chrono::high_resolution_clock::now()-pre_ov;
-	fclose(outFH);
+	*/
 
+	FILE* fq=NULL;
+	fext=NULL;
+	if (strcmp(q_file,"-")==0) fq=stdin;
+	else {
+		fq=fopen(q_file, "r");
+		if (fq==NULL)
+			GError("Error: could not open query file (%s)!\n", q_file);
+		fext=getFileExt(q_file);
+	}
+	GffReader myQ(fq, true, true);
+	if (fext && Gstricmp(fext, "bed")==0) myQ.isBED();
+	myQ.readAll(false, true, true);
+	for (int i=0; i<myQ.gflst.Count(); i++) {
+		GffObj* t=myQ.gflst[i];
+		//TemplateStack<GSeg*> * enu = map_trees.at(it->name).Enumerate(it->start, it->end);
+		TemplateStack<GSeg*> * enu = map_trees.at(t->getGSeqName()).Enumerate(t->start, t->end);
+		if(enu->Size()!=0) {
+			fprintf(outFH, "##Qry|%s:%i-%i %c %s\n", t->getGSeqName(), t->start, t->end, t->strand, t->getID());
+			//			oFile << "##Qry|" << it->name << ":" << it->start << "-" << it->end << it->attrs << "\n";
+			//			oFile.flush();
+			for (int i=0; i<enu->Size(); ++i) {
+				//static_cast<ObjInterval*>((*enu)[i])->obj->printGxf(oFile2);
+				((GffObj*)((*enu)[i]))->printGxf(outFH);
+			}
+		}
+		delete enu;
+	}
+
+
+	fclose(outFH);
 	//std::cerr << (doNCLorITT?"NCList time: ":"tree time: ") << ov_time.count() << "\n";
 	return 0;
 }

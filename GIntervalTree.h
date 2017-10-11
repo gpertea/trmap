@@ -18,7 +18,7 @@
 //                CreateRedTree(a,b,c). Furthermore, each function name 
 //                should begin with a capital letter to easily distinguish 
 //                them from variables. 
-//                                                                     
+//
 //                Variable names: Each word in a variable name begins with 
 //                a capital letter EXCEPT the first letter of the variable 
 //                name.  For example, int newLongInt.  Global variables have 
