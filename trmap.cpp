@@ -15,6 +15,7 @@
 //#include <chrono>
 
 #include "GBase.h"
+#include "GVec.hh"
 #include "gff.h"
 #include "GArgs.h"
 #include "GIntervalTree.h"
@@ -53,6 +54,18 @@ std::vector<qInterval> readQueries(std::istream& input) { //RVO should make this
 	return queries;
 }
 
+char getOvlClass(GffObj* t, GffObj* r) {
+ char c=0;
+
+ return c;
+}
+
+
+
+struct GSTree {
+	GIntervalTree it[3]; //0=unstranded, 1: + strand, 2 : - strand
+};
+
 int main(int argc, char * const argv[]) {
 //	const std::string usage=std::string("Usage: ")+argv[0]+"\n";
 	const std::string usage = std::string("Positional arguments:\n")+
@@ -68,7 +81,7 @@ int main(int argc, char * const argv[]) {
 		exit(EXIT_SUCCESS);
 	}
 
-	std::unordered_map<std::string, GIntervalTree> map_trees;
+	std::unordered_map<std::string, GSTree> map_trees;
 
 	const char* o_file = args.getOpt('o') ? args.getOpt('o') : "-";
 
@@ -86,50 +99,26 @@ int main(int argc, char * const argv[]) {
 	const char* fext=getFileExt(ref_file);
 	GffReader myR(fr, true, true);
 	if (Gstricmp(fext, "bed")==0) myR.isBED();
+	/*
 	myR.readAll(false, true, true);
-
-	//Interval tree
 	for (int i=0; i<myR.gflst.Count(); i++) {
 		GffObj* t=myR.gflst[i];
 		map_trees[t->getGSeqName()].Insert(t);
 	}
-
+    */
+	GffObj* t=NULL;
+	GPVec<GffObj> toFree(true);
+	while ((t=myR.readNext())!=NULL) {
+		if (t->strand=='+')
+		 map_trees[t->getGSeqName()].it[1].Insert(t);
+		else if (t->strand=='-')
+			map_trees[t->getGSeqName()].it[2].Insert(t);
+		else map_trees[t->getGSeqName()].it[0].Insert(t);
+		toFree.Add(t);
+	}
 	FILE* outFH=NULL;
 	if (strcmp(o_file, "-")==0) outFH=stdout;
 	                       else outFH=fopen(o_file, "w");
-	/*
-	std::vector<qInterval> queries;
-	if(*q_file=='-') {
-		queries = readQueries(std::cin);
-	} else {
-		std::ifstream query_file(q_file);
-		if (query_file.is_open()){
-			queries = readQueries(query_file);
-		} else {
-			std::cerr << "query file didn't open";
-			exit(EXIT_FAILURE);
-		}
-//		query_file.close(); //will be done automagically
-	}
-
-	//std::chrono::time_point<std::chrono::high_resolution_clock> pre_ov = std::chrono::high_resolution_clock::now();
-	for (std::vector<qInterval>::const_iterator it=queries.begin(); it!=queries.end(); ++it){
-			//		std::vector<ObjInterval> overlaps;
-			TemplateStack<GSeg*> * enu = map_trees.at(it->name).Enumerate(it->start, it->end);
-			if(enu->Size()!=0){
-				fprintf(outFH, "##Qry|%s: %i-%i %s\n", it->name.c_str(), it->start, it->end, it->attrs.c_str());
-				//			oFile << "##Qry|" << it->name << ":" << it->start << "-" << it->end << it->attrs << "\n";
-				//			oFile.flush();
-				for (int i=0; i<enu->Size(); ++i) {
-					//static_cast<ObjInterval*>((*enu)[i])->obj->printGxf(oFile2);
-					((GffObj*)((*enu)[i]))->printGxf(outFH);
-				}
-			}
-			delete enu;
-	}
-	//std::chrono::duration<double> ov_time = std::chrono::high_resolution_clock::now()-pre_ov;
-	*/
-
 	FILE* fq=NULL;
 	fext=NULL;
 	if (strcmp(q_file,"-")==0) fq=stdin;
@@ -141,25 +130,35 @@ int main(int argc, char * const argv[]) {
 	}
 	GffReader myQ(fq, true, true);
 	if (fext && Gstricmp(fext, "bed")==0) myQ.isBED();
-	myQ.readAll(false, true, true);
-	for (int i=0; i<myQ.gflst.Count(); i++) {
-		GffObj* t=myQ.gflst[i];
-		//TemplateStack<GSeg*> * enu = map_trees.at(it->name).Enumerate(it->start, it->end);
-		TemplateStack<GSeg*> * enu = map_trees.at(t->getGSeqName()).Enumerate(t->start, t->end);
-		if(enu->Size()!=0) {
-			fprintf(outFH, "##Qry|%s:%i-%i %c %s\n", t->getGSeqName(), t->start, t->end, t->strand, t->getID());
-			//			oFile << "##Qry|" << it->name << ":" << it->start << "-" << it->end << it->attrs << "\n";
-			//			oFile.flush();
-			for (int i=0; i<enu->Size(); ++i) {
-				//static_cast<ObjInterval*>((*enu)[i])->obj->printGxf(oFile2);
-				((GffObj*)((*enu)[i]))->printGxf(outFH);
+	//myQ.readAll(false, true, true);
+	//for (int i=0; i<myQ.gflst.Count(); i++) {
+	//	GffObj* t=myQ.gflst[i];
+	t=NULL;
+	while ((t=myQ.readNext())!=NULL) {
+		if (map_trees.count(t->getGSeqName())==0) continue;
+		GVec<int> sidx;
+		int v=0;
+		sidx.Add(v); //always search the '.' strand
+		if (t->strand=='+') { v=1; sidx.Add(v); }
+		else if (t->strand=='-') { v=2; sidx.Add(v); }
+		else { v=1; sidx.Add(v); v=2; sidx.Add(v); }
+		for (int k=0;k<sidx.Count();++k) {
+			TemplateStack<GSeg*> * enu = map_trees.at(t->getGSeqName()).it[sidx[k]].Enumerate(t->start, t->end);
+			if(enu->Size()!=0) {
+				fprintf(outFH, ">%s %s:%d-%d %c ", t->getID(), t->getGSeqName(), t->start, t->end, t->strand);
+				t->printExonList(outFH);
+				fprintf(outFH, "\n");
+				for (int i=0; i<enu->Size(); ++i) {
+					//static_cast<ObjInterval*>((*enu)[i])->obj->printGxf(oFile2);
+					GffObj* r=(GffObj*)((*enu)[i]);
+					r->printGTab(outFH);
+				}
 			}
+			delete enu;
 		}
-		delete enu;
+		delete t;
 	}
 
-
 	fclose(outFH);
-	//std::cerr << (doNCLorITT?"NCList time: ":"tree time: ") << ov_time.count() << "\n";
 	return 0;
 }
