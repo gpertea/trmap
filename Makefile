@@ -23,7 +23,8 @@ OBJS := $(GCLIB)/GBase.o $(GCLIB)/gdna.o $(GCLIB)/codons.o \
 
 .PHONY : all
 all:    trmap
-
+debug: trmap
+release: trmap
 trmap: trmap.o $(OBJS)
 	${LINKER} ${LDFLAGS} -o $@ ${filter-out %.a %.so, $^} ${LIBS}
 
