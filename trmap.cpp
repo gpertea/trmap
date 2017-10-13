@@ -30,30 +30,6 @@ struct qInterval {
 	std::string attrs; //everything else
 };
 
-//bool cmp_tabix(const GffObj& a, const GffObj& b){
-//	return (a.start==b.start)?(a.end==b.end?a.obj->getID()<b.obj->getID():(a.end<b.end)):(a.start<b.start);
-//}
-
-std::vector<qInterval> readQueries(std::istream& input) { //RVO should make this OK
-	std::vector<qInterval> queries;
-	std::string line;
-	while (std::getline(input, line)){
-		if (line.length()!=0 && line.front()!='#'){ //neither blank nor comment, could use continue
-			std::stringstream ss;
-			ss.str(line);
-			std::string name;
-			int start;
-			int end;
-			std::string attrs;
-			ss>>name>>start>>end;
-			--start;
-			std::getline(ss, attrs);
-			queries.push_back({name,start,end,attrs});
-		}
-	}
-	return queries;
-}
-
 bool singleExonTMatch(GffObj& m, GffObj& n, int& ovlen) {
  //if (m.exons.Count()>1 || r.exons.Count()>1..)
  GSeg mseg(m.start, m.end);
@@ -198,18 +174,18 @@ char getOvlCode(GffObj& m, GffObj& r, int& ovlen) {
 }
 
 
-
 struct GSTree {
 	GIntervalTree it[3]; //0=unstranded, 1: + strand, 2 : - strand
 };
 
 int main(int argc, char * const argv[]) {
 //	const std::string usage=std::string("Usage: ")+argv[0]+"\n";
-	const std::string usage = std::string("Positional arguments:\n")+
-			"<ref_gff>    reference file name in GFF/BED format\n"+
-			"<query_gff>  query file name in GFF/BED format or \"-\" to take from stdin\n";
-			//"Options:\n"+
-			//"-T		use interval trees";
+	const std::string usage = std::string("Usage: trmap [-o <outfile>] <ref_gff> <query_gff>\n")+
+	        "Positional arguments:\n"+
+			"  <ref_gff>    reference file name in GFF/BED format\n"+
+			"  <query_gff>  query file name in GFF/BED format or \"-\" for stdin\n"+
+			"Options:\n"+
+			"  -o <outfile>  write output to <outfile> instead of stdout\n";
 
 	GArgs args(argc, argv, "ho:");
 	args.printError(usage.c_str(), true);
@@ -255,7 +231,10 @@ int main(int argc, char * const argv[]) {
 	}
 	FILE* outFH=NULL;
 	if (strcmp(o_file, "-")==0) outFH=stdout;
-	                       else outFH=fopen(o_file, "w");
+	            else {
+	            	outFH=fopen(o_file, "w");
+	            	if (outFH==NULL) GError("Error creating file %s !\n",o_file);
+	            }
 	FILE* fq=NULL;
 	fext=NULL;
 	if (strcmp(q_file,"-")==0) fq=stdin;
