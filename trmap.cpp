@@ -23,6 +23,8 @@
 using std::cout;
 using std::endl;
 
+bool fastOvl=true;
+
 struct qInterval {
 	std::string name;
 	int start;
@@ -196,19 +198,22 @@ struct GSTree {
 
 int main(int argc, char * const argv[]) {
 //	const std::string usage=std::string("Usage: ")+argv[0]+"\n";
-	const std::string usage = std::string("Usage: trmap [-o <outfile>] <ref_gff> <query_gff>\n")+
+	const std::string usage = std::string("Usage: trmap [-F] [-o <outfile>] <ref_gff> <query_gff>\n")+
 	        "Positional arguments:\n"+
 			"  <ref_gff>    reference file name in GFF/BED format\n"+
 			"  <query_gff>  query file name in GFF/BED format or \"-\" for stdin\n"+
 			"Options:\n"+
-			"  -o <outfile>  write output to <outfile> instead of stdout\n";
+			"  -o <outfile> write output to <outfile> instead of stdout\n"+
+			"  -F           report simple interval overlaps (one line per query), \n"+
+			"               without classification, showing target coverage percentage\n";
 
-	GArgs args(argc, argv, "ho:");
+	GArgs args(argc, argv, "hFo:");
 	args.printError(usage.c_str(), true);
 	if (args.getOpt('h')) {
 		cout << usage;
 		exit(EXIT_SUCCESS);
 	}
+	if (args.getOpt('F')) fastOvl=true;
 
 	std::unordered_map<std::string, GSTree> map_trees;
 
@@ -277,16 +282,31 @@ int main(int argc, char * const argv[]) {
 		for (int k=0;k<sidx.Count();++k) {
 			TemplateStack<GSeg*> * enu = map_trees.at(t->getGSeqName()).it[sidx[k]].Enumerate(t->start, t->end);
 			if(enu->Size()!=0) {
-				fprintf(outFH, ">%s %s:%d-%d %c ", t->getID(), t->getGSeqName(), t->start, t->end, t->strand);
-				t->printExonList(outFH);
-				fprintf(outFH, "\n");
-				for (int i=0; i<enu->Size(); ++i) {
-					//static_cast<ObjInterval*>((*enu)[i])->obj->printGxf(oFile2);
-					GffObj* r=(GffObj*)((*enu)[i]);
-					int ovlen=0;
-					char ovlcode=getOvlCode(*t, *r, ovlen);
-					fprintf(outFH, "%c\t", ovlcode);
-					r->printGTab(outFH);
+				if (fastOvl) {
+					fprintf(outFH, "%s\t%s:%d-%d|%c", t->getID(), t->getGSeqName(), t->start, t->end, t->strand);
+					for (int i=0; i<enu->Size(); ++i) {
+						//static_cast<ObjInterval*>((*enu)[i])->obj->printGxf(oFile2);
+						GffObj* r=(GffObj*)((*enu)[i]);
+						int ovlen=t->overlapLen(r);
+						if (ovlen==0)
+							GError("Error: zero length simple overlap reported! (%s vs %s)\n", t->getID(), r->getID());
+						float ovlcov=(100.00*ovlen)/r->len();
+						fprintf(outFH, "\t%s:%.1f", r->getID(), ovlcov);
+						//if (i+1<enu->Size()) fprintf(outFH, ",");
+					}
+					fprintf(outFH, "\n");
+				} else {
+					fprintf(outFH, ">%s %s:%d-%d %c ", t->getID(), t->getGSeqName(), t->start, t->end, t->strand);
+					t->printExonList(outFH);
+					fprintf(outFH, "\n");
+					for (int i=0; i<enu->Size(); ++i) {
+						//static_cast<ObjInterval*>((*enu)[i])->obj->printGxf(oFile2);
+						GffObj* r=(GffObj*)((*enu)[i]);
+						int ovlen=0;
+						char ovlcode=getOvlCode(*t, *r, ovlen);
+						fprintf(outFH, "%c\t", ovlcode);
+						r->printGTab(outFH);
+					}
 				}
 			}
 			delete enu;
