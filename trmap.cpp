@@ -196,7 +196,7 @@ struct GSTree {
 	GIntervalTree it[3]; //0=unstranded, 1: + strand, 2 : - strand
 };
 
-int main(int argc, char * const argv[]) {
+int main(int argc, char* argv[]) {
 //	const std::string usage=std::string("Usage: ")+argv[0]+"\n";
 	const std::string usage = std::string("Usage: trmap [-F] [-o <outfile>] <ref_gff> <query_gff>\n")+
 	        "Positional arguments:\n"+
