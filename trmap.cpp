@@ -23,7 +23,7 @@
 using std::cout;
 using std::endl;
 
-bool fastOvl=true;
+bool simpleOvl=false;
 
 struct qInterval {
 	std::string name;
@@ -204,16 +204,16 @@ int main(int argc, char* argv[]) {
 			"  <query_gff>  query file name in GFF/BED format or \"-\" for stdin\n"+
 			"Options:\n"+
 			"  -o <outfile> write output to <outfile> instead of stdout\n"+
-			"  -F           report simple interval overlaps (one line per query), \n"+
+			"  -S           report simple interval overlaps (one line per query), \n"+
 			"               without classification, showing target coverage percentage\n";
 
-	GArgs args(argc, argv, "hFo:");
+	GArgs args(argc, argv, "hSo:");
 	args.printError(usage.c_str(), true);
 	if (args.getOpt('h')) {
 		cout << usage;
 		exit(EXIT_SUCCESS);
 	}
-	if (args.getOpt('F')) fastOvl=true;
+	if (args.getOpt('S')) simpleOvl=true;
 
 	std::unordered_map<std::string, GSTree> map_trees;
 
@@ -282,7 +282,7 @@ int main(int argc, char* argv[]) {
 		for (int k=0;k<sidx.Count();++k) {
 			TemplateStack<GSeg*> * enu = map_trees.at(t->getGSeqName()).it[sidx[k]].Enumerate(t->start, t->end);
 			if(enu->Size()!=0) {
-				if (fastOvl) {
+				if (simpleOvl) {
 					fprintf(outFH, "%s\t%s:%d-%d|%c", t->getID(), t->getGSeqName(), t->start, t->end, t->strand);
 					for (int i=0; i<enu->Size(); ++i) {
 						//static_cast<ObjInterval*>((*enu)[i])->obj->printGxf(oFile2);
